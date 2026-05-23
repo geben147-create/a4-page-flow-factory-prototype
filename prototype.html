@@ -1,0 +1,1812 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A4 Page Flow Factory — Prototype</title>
+<style>
+:root {
+  --bg:#FAFAF9; --surface:#FFFFFF; --surface-alt:#F4F4F2; --border:#E5E5E2;
+  --text:#111111; --text-secondary:#6B6B6B; --accent:#3D5AFE; --accent-hover:#2C46DB;
+  --success:#10B981; --warning:#F59E0B; --danger:#EF4444;
+  --status-draft:#9B9B9B; --status-extracting:#F59E0B; --status-classifying:#3D5AFE;
+  --status-designing:#8B5CF6; --status-previewing:#06B6D4; --status-checking:#EAB308;
+  --status-done:#10B981; --status-archived:#6B6B6B;
+  --type-hook:#F59E0B; --type-problem:#EF4444; --type-solution:#10B981;
+  --type-proof:#3D5AFE; --type-cta:#8B5CF6; --type-pain_point:#DC2626;
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:24px; --space-6:32px; --space-7:48px;
+  --radius-sm:6px; --radius-md:8px; --radius-lg:12px; --radius-xl:16px;
+}
+[data-theme="dark"] {
+  --bg:#0B0B0B; --surface:#161616; --surface-alt:#1F1F1F; --border:#2A2A2A;
+  --text:#F5F5F5; --text-secondary:#9B9B9B; --accent:#6E85FF;
+}
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; height:100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", Pretendard, sans-serif;
+  font-size: 14px; color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, textarea, select { font-family: inherit; color: inherit; }
+a { color: var(--accent); text-decoration: none; }
+
+/* === Layout === */
+#app { display: flex; flex-direction: column; min-height: 100vh; }
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 56px; padding: 0 var(--space-5);
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 50;
+}
+.header-left { display: flex; align-items: center; gap: var(--space-4); }
+.logo { font-weight: 700; font-size: 16px; letter-spacing: -0.5px; }
+.logo .dot { color: var(--accent); }
+.header-right { display: flex; align-items: center; gap: var(--space-3); }
+.icon-btn {
+  width: 36px; height: 36px; border-radius: var(--radius-md);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary); position: relative;
+}
+.icon-btn:hover { background: var(--surface-alt); color: var(--text); }
+.avatar {
+  width: 32px; height: 32px; border-radius: 50%; background: var(--accent);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 13px;
+}
+.notif-dot {
+  position: absolute; top: 8px; right: 8px;
+  width: 8px; height: 8px; border-radius: 50%; background: var(--danger);
+}
+
+.body { display: flex; flex: 1; }
+.sidebar {
+  width: 240px; background: var(--surface); border-right: 1px solid var(--border);
+  padding: var(--space-4) var(--space-3); display: flex; flex-direction: column; gap: var(--space-1);
+  transition: width 200ms;
+}
+.sidebar.collapsed { width: 56px; }
+.sidebar.collapsed .nav-label { display: none; }
+.nav-item {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3); border-radius: var(--radius-md);
+  color: var(--text-secondary); font-size: 14px; font-weight: 500;
+  cursor: pointer; user-select: none;
+}
+.nav-item:hover { background: var(--surface-alt); color: var(--text); }
+.nav-item.active { background: var(--surface-alt); color: var(--accent); }
+.nav-icon { width: 18px; height: 18px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+
+.main { flex: 1; padding: var(--space-5); overflow-y: auto; max-width: calc(100vw - 240px); }
+.sidebar.collapsed + .main { max-width: calc(100vw - 56px); }
+
+/* === Common === */
+.breadcrumb {
+  display: flex; align-items: center; gap: var(--space-2);
+  color: var(--text-secondary); font-size: 13px; margin-bottom: var(--space-4);
+}
+.breadcrumb .back { cursor: pointer; }
+.breadcrumb .back:hover { color: var(--text); }
+.breadcrumb .sep { color: var(--border); }
+
+h1 { font-size: 24px; font-weight: 600; margin: 0 0 var(--space-5) 0; }
+h2 { font-size: 18px; font-weight: 600; margin: 0 0 var(--space-4) 0; }
+h3 { font-size: 15px; font-weight: 600; margin: 0 0 var(--space-3) 0; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  padding: 9px var(--space-4); border-radius: var(--radius-md);
+  font-size: 13px; font-weight: 500; transition: all 150ms;
+  border: 1px solid transparent;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { background: var(--border); color: var(--text-secondary); cursor: not-allowed; }
+.btn-secondary { background: var(--surface); border-color: var(--border); color: var(--text); }
+.btn-secondary:hover { background: var(--surface-alt); }
+.btn-ghost { color: var(--text-secondary); padding: 6px var(--space-3); }
+.btn-ghost:hover { background: var(--surface-alt); color: var(--text); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-sm { padding: 6px var(--space-3); font-size: 12px; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: var(--space-5);
+}
+.card-flat { background: var(--surface-alt); border-radius: var(--radius-lg); padding: var(--space-4); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--surface-alt); font-size: 12px; font-weight: 500;
+  color: var(--text-secondary);
+}
+.badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+/* Step Indicator */
+.step-indicator {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin-bottom: var(--space-5); overflow-x: auto; padding-bottom: var(--space-2);
+}
+.step {
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
+  cursor: pointer; min-width: 64px;
+}
+.step:disabled { cursor: not-allowed; opacity: 0.5; }
+.step-circle {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; color: var(--text-secondary);
+}
+.step.passed .step-circle { background: var(--accent); border-color: var(--accent); color: #fff; }
+.step.current .step-circle { border-color: var(--accent); color: var(--accent); border-width: 3px; }
+.step-label { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+.step.passed .step-label, .step.current .step-label { color: var(--text); }
+.step-line { flex: 1; height: 2px; background: var(--border); min-width: 16px; }
+.step-line.passed { background: var(--accent); }
+
+/* === Dashboard === */
+.welcome { font-size: 24px; font-weight: 600; margin-bottom: var(--space-5); }
+.quick-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.quick-card {
+  border: 2px dashed var(--border); border-radius: var(--radius-lg);
+  padding: var(--space-6); text-align: center; cursor: pointer;
+  transition: all 150ms; background: var(--surface);
+}
+.quick-card:hover { border-color: var(--accent); background: var(--surface-alt); }
+.quick-card .ico { font-size: 28px; margin-bottom: var(--space-2); }
+.quick-card .label { font-weight: 600; font-size: 15px; }
+
+.project-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.project-row {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-4); border: 1px solid var(--border);
+  border-radius: var(--radius-md); background: var(--surface);
+  cursor: pointer; transition: all 100ms;
+}
+.project-row:hover { border-color: var(--accent); }
+.project-row .ico { font-size: 20px; }
+.project-row .name { flex: 1; font-weight: 500; }
+.project-row .time { color: var(--text-secondary); font-size: 12px; }
+
+.counter-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+.counter-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-4);
+  cursor: pointer; transition: border-color 150ms;
+}
+.counter-card:hover { border-color: var(--accent); }
+.counter-card .label { color: var(--text-secondary); font-size: 12px; margin-bottom: var(--space-1); }
+.counter-card .num { font-size: 24px; font-weight: 600; }
+
+/* === New Project === */
+.form-field { margin-bottom: var(--space-5); }
+.form-field label { display: block; font-weight: 500; margin-bottom: var(--space-2); font-size: 13px; }
+.form-field input[type="text"] {
+  width: 100%; padding: 10px var(--space-3); border: 1px solid var(--border);
+  border-radius: var(--radius-md); background: var(--surface); font-size: 14px;
+}
+.form-field input[type="text"]:focus { outline: none; border-color: var(--accent); }
+
+.dropzone {
+  border: 2px dashed var(--border); border-radius: var(--radius-lg);
+  padding: var(--space-7) var(--space-5); text-align: center;
+  background: var(--surface); cursor: pointer; transition: all 150ms;
+}
+.dropzone:hover, .dropzone.drag { border-color: var(--accent); background: var(--surface-alt); }
+.dropzone .ico { font-size: 32px; margin-bottom: var(--space-3); }
+.dropzone .hint { color: var(--text-secondary); font-size: 12px; margin-top: var(--space-2); }
+
+.file-list { margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
+.file-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3); background: var(--surface-alt);
+  border-radius: var(--radius-md); font-size: 13px;
+}
+.file-row .name { flex: 1; }
+.file-row .status { font-size: 12px; color: var(--text-secondary); }
+.progress { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; width: 100px; }
+.progress > div { height: 100%; background: var(--accent); transition: width 200ms; }
+
+.radio-group { display: flex; flex-direction: column; gap: var(--space-2); }
+.radio-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-3); border: 1px solid var(--border);
+  border-radius: var(--radius-md); cursor: pointer;
+}
+.radio-item.selected { border-color: var(--accent); background: var(--surface-alt); }
+
+/* === Extract (UI6 4-pane) === */
+.ui6 { display: grid; grid-template-columns: 200px 1fr 360px; gap: var(--space-3); height: calc(100vh - 200px); }
+.ui6-pane {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-3);
+  overflow-y: auto;
+}
+.pane-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  color: var(--text-secondary); margin-bottom: var(--space-3); letter-spacing: 0.5px;
+}
+.thumb-rail { display: flex; flex-direction: column; gap: var(--space-2); }
+.thumb {
+  width: 100%; aspect-ratio: 0.73; background: var(--surface-alt);
+  border: 2px solid transparent; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: var(--text-secondary); cursor: pointer;
+}
+.thumb.active { border-color: var(--accent); color: var(--accent); }
+.thumb:hover { background: var(--border); }
+
+.extracted-text {
+  width: 100%; min-height: 400px; border: none; resize: none;
+  font-family: inherit; font-size: 14px; line-height: 1.6;
+  background: transparent; color: var(--text); outline: none;
+}
+.save-indicator {
+  position: absolute; top: var(--space-3); right: var(--space-3);
+  font-size: 11px; color: var(--success); opacity: 0;
+  transition: opacity 200ms;
+}
+.save-indicator.show { opacity: 1; }
+
+.model-toggle {
+  display: flex; gap: var(--space-1); background: var(--surface-alt);
+  padding: 3px; border-radius: var(--radius-md); margin-bottom: var(--space-3);
+}
+.model-toggle button {
+  flex: 1; padding: 6px var(--space-2); border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 500; color: var(--text-secondary);
+}
+.model-toggle button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+
+.prompt-box {
+  width: 100%; min-height: 280px; border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-3);
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  font-size: 12px; line-height: 1.5; background: var(--surface-alt);
+  color: var(--text); resize: vertical; outline: none;
+}
+
+.quality-bar {
+  margin-top: var(--space-3); background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-3);
+  display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap;
+}
+.quality-item { display: flex; align-items: center; gap: var(--space-2); font-size: 12px; }
+.quality-item .dot { width: 8px; height: 8px; border-radius: 50%; }
+.quality-good .dot { background: var(--success); }
+.quality-warning .dot { background: var(--warning); }
+.quality-error .dot { background: var(--danger); }
+.quality-actions { margin-left: auto; display: flex; gap: var(--space-2); }
+
+/* === Classify === */
+.tab-bar {
+  display: flex; gap: var(--space-1); background: var(--surface-alt);
+  padding: 4px; border-radius: var(--radius-md); width: fit-content;
+  margin-bottom: var(--space-5);
+}
+.tab {
+  padding: 8px var(--space-4); border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 500; color: var(--text-secondary);
+}
+.tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+
+.block-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.block-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+.block-row .type-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.block-row .type-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  width: 80px; color: var(--text-secondary);
+}
+.block-row .text { flex: 1; font-size: 13px; }
+.block-row input[type="checkbox"] { accent-color: var(--accent); }
+
+.design-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.design-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-4);
+  text-align: center; cursor: pointer; transition: border-color 150ms;
+}
+.design-card:hover, .design-card.active { border-color: var(--accent); }
+.design-card .ico { font-size: 28px; margin-bottom: var(--space-2); }
+.design-card .label { font-size: 12px; font-weight: 500; }
+.design-card .type-name { font-size: 11px; color: var(--text-secondary); margin-top: var(--space-1); }
+
+.design-detail {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-5);
+  display: grid; grid-template-columns: 200px 1fr; gap: var(--space-5);
+}
+.design-preview {
+  aspect-ratio: 1; background: var(--surface-alt); border-radius: var(--radius-md);
+  display: flex; align-items: center; justify-content: center; font-size: 36px;
+}
+.palette { display: flex; gap: var(--space-1); margin: var(--space-2) 0; }
+.swatch { width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.code-block {
+  background: var(--surface-alt); padding: var(--space-3);
+  border-radius: var(--radius-sm); font-family: ui-monospace, monospace;
+  font-size: 12px; margin-bottom: var(--space-3); position: relative;
+}
+.code-block .copy-btn {
+  position: absolute; top: var(--space-2); right: var(--space-2);
+}
+
+/* === Prompts === */
+.prompts-layout { display: grid; grid-template-columns: 320px 1fr; gap: var(--space-4); min-height: 600px; }
+.prompt-list {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-3); overflow-y: auto;
+}
+.prompt-search {
+  width: 100%; padding: 8px var(--space-3); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface-alt); margin-bottom: var(--space-3);
+  font-size: 13px; outline: none;
+}
+.prompt-item {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 8px var(--space-3); border-radius: var(--radius-sm);
+  cursor: pointer; font-size: 13px;
+}
+.prompt-item:hover { background: var(--surface-alt); }
+.prompt-item.active { background: var(--surface-alt); color: var(--accent); font-weight: 500; }
+.prompt-item .status-icon { margin-left: auto; font-size: 11px; }
+.prompt-group-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  color: var(--text-secondary); padding: var(--space-3) var(--space-3) var(--space-2);
+}
+.prompt-sub-item { padding-left: var(--space-6); font-size: 12px; }
+
+.prompt-editor {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-4); display: flex; flex-direction: column;
+}
+.editor-meta { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+.scope-tag {
+  padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500;
+}
+.scope-global { background: rgba(61,90,254,0.1); color: var(--accent); }
+.scope-block { background: rgba(139,92,246,0.1); color: #8B5CF6; }
+.scope-asset { background: rgba(16,185,129,0.1); color: var(--success); }
+
+/* === Recipe === */
+.recipe-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.recipe-card {
+  background: var(--surface); border: 2px solid var(--border);
+  border-radius: var(--radius-lg); padding: var(--space-5);
+  cursor: pointer; transition: all 200ms;
+  display: flex; flex-direction: column;
+}
+.recipe-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.recipe-card.selected { border-color: var(--accent); background: var(--surface-alt); }
+.recipe-card .ico { font-size: 32px; margin-bottom: var(--space-3); }
+.recipe-card .name { font-size: 16px; font-weight: 600; margin-bottom: var(--space-3); }
+.recipe-flow {
+  flex: 1; display: flex; flex-direction: column; gap: var(--space-2);
+  font-size: 12px; color: var(--text-secondary); margin-bottom: var(--space-4);
+}
+.recipe-flow .arrow { color: var(--border); }
+
+.recipe-detail {
+  background: var(--surface-alt); border-radius: var(--radius-md);
+  padding: var(--space-4); margin-bottom: var(--space-4);
+}
+.recipe-step-list { list-style: none; margin: 0; padding: 0; }
+.recipe-step-list li {
+  padding: var(--space-2) 0; font-size: 13px;
+  border-bottom: 1px dashed var(--border);
+}
+.recipe-step-list li:last-child { border-bottom: none; }
+
+/* === Preview === */
+.channel-tabs {
+  display: flex; gap: var(--space-1); margin-bottom: var(--space-4);
+  overflow-x: auto; padding-bottom: var(--space-1);
+}
+.channel-tab {
+  padding: 8px var(--space-4); border-radius: var(--radius-md);
+  font-size: 13px; font-weight: 500; color: var(--text-secondary);
+  white-space: nowrap; background: var(--surface); border: 1px solid var(--border);
+}
+.channel-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.preview-thumbs {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+.preview-thumb {
+  aspect-ratio: 4/5; border-radius: var(--radius-md); padding: var(--space-3);
+  display: flex; flex-direction: column; justify-content: space-between;
+  cursor: pointer; color: #fff; position: relative; overflow: hidden;
+  border: 2px solid transparent;
+}
+.preview-thumb.active { border-color: var(--accent); }
+.preview-thumb .type-badge {
+  font-size: 9px; font-weight: 600; padding: 2px 6px;
+  background: rgba(255,255,255,0.2); border-radius: 3px;
+  align-self: flex-start; text-transform: uppercase;
+}
+.preview-thumb .ttl { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.preview-thumb .pg-num { font-size: 10px; opacity: 0.8; }
+
+.preview-large {
+  max-width: 480px; aspect-ratio: 4/5; margin: 0 auto var(--space-5);
+  padding: var(--space-7); border-radius: var(--radius-xl);
+  display: flex; flex-direction: column; justify-content: space-between;
+  color: #fff;
+}
+.preview-large .type-badge { font-size: 12px; font-weight: 600; padding: 4px 10px; background: rgba(255,255,255,0.2); border-radius: 4px; align-self: flex-start; }
+.preview-large h2 { font-size: 28px; line-height: 1.3; color: #fff; margin: 0; }
+.preview-large .pg-num { font-size: 12px; opacity: 0.8; }
+
+.slot-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.slot-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  font-size: 13px; cursor: pointer;
+}
+.slot-row:hover, .slot-row.active { border-color: var(--accent); }
+.slot-row .slot-name { font-weight: 500; flex: 1; }
+.slot-row .req-tag { font-size: 11px; padding: 2px 6px; border-radius: 3px; }
+.slot-row .req-tag.required { background: rgba(239,68,68,0.1); color: var(--danger); }
+.slot-row .req-tag.optional { background: var(--surface-alt); color: var(--text-secondary); }
+.slot-row .status { font-size: 12px; }
+.slot-row .status.ready { color: var(--success); }
+.slot-row .status.pending { color: var(--warning); }
+.slot-row .status.prompt { color: var(--text-secondary); }
+
+.slot-detail {
+  margin-top: var(--space-4); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: var(--space-4); display: grid; grid-template-columns: 200px 1fr; gap: var(--space-4);
+}
+.slot-drop {
+  aspect-ratio: 1; border: 2px dashed var(--border); border-radius: var(--radius-md);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary); font-size: 12px; text-align: center; cursor: pointer;
+  background: var(--surface-alt);
+}
+.slot-drop.has-image { background-size: cover; background-position: center; border-style: solid; }
+
+/* === QA === */
+.qa-group { margin-bottom: var(--space-5); }
+.qa-channel-name { font-size: 15px; font-weight: 600; margin-bottom: var(--space-3); }
+.qa-item {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) 0; font-size: 13px;
+}
+.qa-icon { width: 16px; flex-shrink: 0; }
+.qa-pass { color: var(--success); }
+.qa-warning { color: var(--warning); }
+.qa-error { color: var(--danger); }
+
+.summary-banner {
+  padding: var(--space-4) var(--space-5); border-radius: var(--radius-md);
+  background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3);
+  margin: var(--space-5) 0; display: flex; justify-content: space-between; align-items: center;
+}
+
+/* === Export === */
+.export-group {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-3);
+}
+.export-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3); }
+.export-file {
+  font-family: ui-monospace, monospace; font-size: 12px;
+  padding: var(--space-1) 0; color: var(--text-secondary);
+}
+
+.export-all {
+  background: var(--accent); color: #fff;
+  padding: var(--space-5); border-radius: var(--radius-md);
+  text-align: center; cursor: pointer; font-size: 15px; font-weight: 600;
+  margin: var(--space-5) 0;
+}
+.export-all:hover { background: var(--accent-hover); }
+
+/* === Modal === */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; padding: var(--space-4);
+}
+.modal {
+  background: var(--surface); border-radius: var(--radius-xl);
+  padding: var(--space-5); max-width: 480px; width: 100%;
+  max-height: 90vh; overflow-y: auto;
+}
+.modal h3 { margin-top: 0; }
+.modal-actions { display: flex; gap: var(--space-2); justify-content: flex-end; margin-top: var(--space-5); }
+
+/* === Toast === */
+#toast-root {
+  position: fixed; bottom: var(--space-5); right: var(--space-5);
+  z-index: 200; display: flex; flex-direction: column; gap: var(--space-2);
+  pointer-events: none;
+}
+.toast {
+  background: var(--text); color: var(--bg);
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-md);
+  font-size: 13px; font-weight: 500;
+  animation: slideIn 250ms ease-out;
+  max-width: 360px; pointer-events: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.toast.success { background: var(--success); color: #fff; }
+.toast.warning { background: var(--warning); color: #fff; }
+.toast.error { background: var(--danger); color: #fff; }
+@keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* === Library === */
+.lib-filters { display: flex; gap: var(--space-2); margin-bottom: var(--space-4); flex-wrap: wrap; }
+.filter-chip {
+  padding: 4px var(--space-3); border-radius: 999px;
+  font-size: 12px; background: var(--surface-alt); cursor: pointer;
+  border: 1px solid var(--border);
+}
+.filter-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.lib-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+
+/* === Settings === */
+.settings-section {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--space-5); margin-bottom: var(--space-3);
+}
+.settings-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: var(--space-3) 0; border-bottom: 1px solid var(--border);
+}
+.settings-row:last-child { border-bottom: none; }
+
+/* === Empty state === */
+.empty {
+  text-align: center; padding: var(--space-7) var(--space-5);
+  color: var(--text-secondary);
+}
+.empty .ico { font-size: 48px; margin-bottom: var(--space-3); opacity: 0.4; }
+.empty h3 { color: var(--text); }
+
+/* === Responsive === */
+@media (max-width: 1023px) {
+  .ui6 { grid-template-columns: 180px 1fr 320px; }
+}
+@media (max-width: 767px) {
+  .sidebar { position: fixed; left: -240px; top: 56px; bottom: 0; z-index: 40; transition: left 200ms; }
+  .sidebar.mobile-open { left: 0; }
+  .main { max-width: 100vw; padding: var(--space-4); }
+  .ui6 { grid-template-columns: 1fr; height: auto; }
+  .quick-grid { grid-template-columns: 1fr; }
+  .counter-grid { grid-template-columns: repeat(2, 1fr); }
+  .recipe-grid { grid-template-columns: 1fr; }
+  .preview-thumbs { grid-template-columns: repeat(2, 1fr); }
+  .prompts-layout { grid-template-columns: 1fr; }
+  .design-grid { grid-template-columns: repeat(2, 1fr); }
+  .design-detail, .slot-detail { grid-template-columns: 1fr; }
+  .lib-grid { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+
+<script>
+"use strict";
+
+// ============ INITIAL STATE ============
+const INITIAL_STATE = {
+  user: { name: 'dohaha', initial: 'D' },
+  theme: 'light',
+  sidebarCollapsed: false,
+  mobileSidebarOpen: false,
+  currentExtractPage: 0,
+  currentModel: 'claude',
+  currentClassifyTab: 'text',
+  currentDesignBlock: 0,
+  currentPromptFile: 'P3_style',
+  currentChannelTab: 'instagram_cardnews',
+  currentPreviewPage: 0,
+  currentLibTab: 'text',
+  selectedRecipe: 'pas',
+  selectedSlot: 's2',
+  projects: [
+    { id: 'p1', name: 'Trusta 카드뉴스 v1', stage: 'previewing', updatedAt: Date.now() - 1000*60*60*2 },
+    { id: 'p2', name: 'SaaS 리포트', stage: 'extracting', updatedAt: Date.now() - 1000*60*60*24 },
+    { id: 'p3', name: '친환경 가이드', stage: 'done', updatedAt: Date.now() - 1000*60*60*24*3 },
+    { id: 'p4', name: '브랜드 매뉴얼', stage: 'classifying', updatedAt: Date.now() - 1000*60*60*5 },
+    { id: 'p5', name: 'A4 보고서 템플릿', stage: 'designing', updatedAt: Date.now() - 1000*60*60*30 },
+  ],
+  extractedPages: [
+    { id: 'pg1', label: 'p1', text: '# Trusta\n\n## 후크\n기존 마케팅으론 한계가 있다', quality: 'good' },
+    { id: 'pg2', label: 'p2', text: '## 문제\n리드는 늘었지만 전환은 그대로다', quality: 'good' },
+    { id: 'pg3', label: 'p3', text: '## 자극\n매월 광고비만 새는 느낌', quality: 'warning' },
+    { id: 'pg4', label: 'p4', text: '## 해결\nTrusta의 자동 분류로 진짜 리드를 가려낸다', quality: 'good' },
+    { id: 'pg5', label: 'p5', text: '## 증거\n30개 SaaS 도입사 평균 전환율 +2.3배', quality: 'good' },
+    { id: 'pg6', label: 'p6', text: '## CTA\n14일 무료체험 시작', quality: 'good' },
+  ],
+  extractPrompts: {
+    claude: '<role>\n  너는 PDF/이미지에서 텍스트를 추출하는 전문가다.\n</role>\n\n<task>\n  주어진 이미지를 한국어로 추출하라.\n  마크다운 헤더 구조를 유지하고, 표는 가능한 한 보존한다.\n</task>\n\n<output_format>\n  ## 제목\n  본문\n</output_format>',
+    gpt: '# 역할\n너는 PDF/이미지 추출 전문가다.\n\n## 입력\n페이지 이미지 1장\n\n## 작업\n- 모든 텍스트를 추출\n- 마크다운 헤더 보존\n- 표는 가능한 한 유지\n\n## 출력\n순수 마크다운만',
+    gemini: 'Example 1:\nInput: [slide image with title "Problem"]\nOutput: ## Problem\n\nExample 2:\nInput: [slide with bullet list]\nOutput: - bullet 1\n- bullet 2\n\nNow extract from the given image.',
+  },
+  textBlocks: [
+    { id: 'b1', type: 'hook', text: '기존 마케팅으론 한계가 있다', selected: true },
+    { id: 'b2', type: 'problem', text: '리드는 늘었지만 전환은 그대로', selected: true },
+    { id: 'b3', type: 'pain_point', text: '매월 광고비만 새는 느낌', selected: true },
+    { id: 'b4', type: 'solution', text: 'Trusta의 자동 분류', selected: true },
+    { id: 'b5', type: 'proof', text: '30개 SaaS 도입사 데이터', selected: true },
+    { id: 'b6', type: 'cta', text: '지금 무료체험', selected: false },
+  ],
+  designBlocks: [
+    { id: 'd1', type: 'icon', desc: '미니멀 라인 아이콘', palette: ['#111111','#FFFFFF'], prompt: 'A minimal line icon, single weight stroke, no fill, monochrome', emoji: '🎯' },
+    { id: 'd2', type: 'palette', desc: '친환경 그린 톤 SaaS', palette: ['#2ECC71','#27AE60','#FFFFFF','#F4F4F2','#111111'], prompt: 'Eco-friendly green palette with high contrast, suitable for SaaS dashboard', emoji: '🎨' },
+    { id: 'd3', type: 'typography', desc: 'Pretendard SemiBold 헤더', palette: [], prompt: 'Korean typography with Pretendard SemiBold for headers, Regular for body', emoji: '✍️' },
+    { id: 'd4', type: 'card_layout', desc: '둥근 모서리 12px 카드', palette: [], prompt: 'Rounded card layout 12px radius, subtle 1px border, no shadow', emoji: '🃏' },
+  ],
+  prompts: {
+    'P1_extract': { name: 'P1_extract.md', scope: 'global', modified: false, content: '# 추출 프롬프트 (기본)\n\n이미지/PDF 페이지에서 텍스트를 추출한다.\n\n## 입력\n{{page_image}}\n\n## 출력\n마크다운' },
+    'P2_classify': { name: 'P2_classify.md', scope: 'global', modified: false, content: '# 블록 분류 프롬프트\n\n추출 텍스트를 의미 단위 블록으로 분류한다.\n\n타입: hook / problem / solution / proof / cta' },
+    'P3_style': { name: 'P3_style.md', scope: 'block', modified: true, content: '# 스타일 프롬프트\n\n각 블록의 톤앤매너를 정의한다.\n\n블록: {{block_type}}\n톤: {{tone}}' },
+  },
+  promptGroups: {
+    P4_image: [
+      { id: 'P4_p1_icon', name: 'page_01_icon_01.md' },
+      { id: 'P4_p1_illust', name: 'page_01_illust_01.md' },
+      { id: 'P4_p2_icon', name: 'page_02_icon_01.md' },
+    ],
+    P5_channel: [
+      { id: 'P5_ig', name: 'instagram_cardnews' },
+      { id: 'P5_li', name: 'linkedin_post' },
+      { id: 'P5_md', name: 'medium_article' },
+      { id: 'P5_x', name: 'x_thread' },
+    ]
+  },
+  recipes: [
+    { id: 'pas', name: 'PAS', emoji: '🔥', flow: ['Problem','Agitation','Solution'], steps: ['hook','problem','pain_point','solution','proof','cta'] },
+    { id: 'before-after', name: 'Before-After', emoji: '⚖', flow: ['Before','After'], steps: ['hook','before','after','cta'] },
+    { id: 'comparison', name: 'Comparison', emoji: '🆚', flow: ['A vs B'], steps: ['hook','option_a','option_b','recommend'] },
+    { id: 'lead-capture', name: 'Lead Capture', emoji: '📩', flow: ['Hook','Promise','Form'], steps: ['hook','promise','form'] },
+    { id: 'convert-boost', name: 'Convert Boost', emoji: '🚀', flow: ['Hook','Proof','Offer','CTA'], steps: ['hook','problem','proof','offer','cta'] },
+  ],
+  channels: [
+    { id: 'instagram_cardnews', name: 'IG 카드뉴스', icon: '📱', size: '1080×1350' },
+    { id: 'linkedin_post', name: 'LinkedIn', icon: '💼', size: '1080×1080' },
+    { id: 'medium_article', name: 'Medium', icon: '📝', size: '1200×675' },
+    { id: 'x_thread', name: 'X Thread', icon: '🐦', size: '1200×675' },
+  ],
+  channelPages: {
+    instagram_cardnews: [
+      { type: 'hook', text: '기존 마케팅으론 한계가 있다', color: '#3D5AFE' },
+      { type: 'problem', text: '리드는 늘었지만 전환은 그대로', color: '#EF4444' },
+      { type: 'pain_point', text: '매월 광고비만 새는 느낌', color: '#DC2626' },
+      { type: 'solution', text: 'Trusta의 자동 분류', color: '#10B981' },
+      { type: 'proof', text: '도입사 평균 전환율 +2.3배', color: '#3D5AFE' },
+      { type: 'offer', text: '14일 무료체험', color: '#06B6D4' },
+      { type: 'cta', text: '지금 시작하기', color: '#8B5CF6' },
+    ],
+    linkedin_post: [
+      { type: 'hook', text: 'SaaS 마케터가 알아야 할 진실', color: '#3D5AFE' },
+      { type: 'body', text: '진짜 리드는 1%다', color: '#0A66C2' },
+    ],
+    medium_article: [
+      { type: 'header', text: 'How we improved conversion 2.3x', color: '#000' },
+      { type: 'body', text: 'Reading time: 5 min', color: '#333' },
+    ],
+    x_thread: [
+      { type: 'hook', text: '🧵 SaaS 전환율 2.3배 올린 방법', color: '#1DA1F2' },
+      { type: 'tweet2', text: '핵심은 리드 분류였다', color: '#1DA1F2' },
+    ],
+  },
+  imageSlots: [
+    { id: 's1', name: 'icon_01', page: 'p1', type: 'icon', status: 'ready', required: true },
+    { id: 's2', name: 'illust_01', page: 'p2', type: 'illust', status: 'pending', required: false },
+    { id: 's3', name: 'hero_01', page: 'p3', type: 'hero', status: 'prompt_only', required: true },
+    { id: 's4', name: 'chart_01', page: 'p4', type: 'chart', status: 'ready', required: true },
+  ],
+  qaResults: [
+    { channel: 'Instagram 카드뉴스', items: [
+      { status: 'pass', label: '해상도 일치 (1080×1350)' },
+      { status: 'pass', label: '한글 폰트 렌더링 정상' },
+      { status: 'pass', label: 'Safe area 침범 없음' },
+      { status: 'pass', label: '이미지 슬롯 모두 채워짐 (필수 4/4)' },
+      { status: 'warning', label: 'p3: 본문 텍스트 잘림 가능성' },
+      { status: 'pass', label: 'HTML ↔ PNG 1:1 대응' },
+    ]},
+    { channel: 'LinkedIn', items: [
+      { status: 'pass', label: '해상도 일치 (1080×1080)' },
+      { status: 'warning', label: '이미지 슬롯 비어있음 (illust_01, 선택)' },
+    ]},
+  ],
+  library: {
+    textBlocks: [
+      { id: 'lb1', type: 'hook', text: '기존 마케팅으론 한계가 있다', source: 'Trusta 카드뉴스 v1' },
+      { id: 'lb2', type: 'problem', text: '리드는 늘었지만 전환은 그대로', source: 'Trusta 카드뉴스 v1' },
+      { id: 'lb3', type: 'solution', text: 'AI 자동 분류 솔루션', source: 'SaaS 리포트' },
+      { id: 'lb4', type: 'proof', text: '도입 후 평균 전환율 2배 증가', source: '친환경 가이드' },
+      { id: 'lb5', type: 'cta', text: '14일 무료체험 시작하기', source: 'Trusta 카드뉴스 v1' },
+      { id: 'lb6', type: 'hook', text: '왜 우리만 안 될까?', source: '브랜드 매뉴얼' },
+    ]
+  },
+};
+
+let state = loadState();
+let saveTimer = null;
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem('a4pf_state');
+    if (saved) return { ...INITIAL_STATE, ...JSON.parse(saved) };
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(INITIAL_STATE));
+}
+function saveState() {
+  try { localStorage.setItem('a4pf_state', JSON.stringify(state)); } catch (e) {}
+}
+
+const STAGE_LABEL = {
+  draft:'초안', extracting:'추출중', classifying:'분류중', designing:'설계중',
+  previewing:'미리보기', checking:'검사중', done:'완료', archived:'보관'
+};
+const STAGE_VAR = {
+  draft:'--status-draft', extracting:'--status-extracting', classifying:'--status-classifying',
+  designing:'--status-designing', previewing:'--status-previewing', checking:'--status-checking',
+  done:'--status-done', archived:'--status-archived'
+};
+const TYPE_VAR = {
+  hook:'--type-hook', problem:'--type-problem', pain_point:'--type-pain_point',
+  solution:'--type-solution', proof:'--type-proof', cta:'--type-cta'
+};
+const TYPE_LABEL = {
+  hook:'HOOK', problem:'PROBLEM', pain_point:'PAIN', solution:'SOLUTION',
+  proof:'PROOF', cta:'CTA', offer:'OFFER', body:'BODY', header:'HEADER', tweet2:'TWEET'
+};
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  const h = Math.floor(diff / (1000*60*60));
+  if (h < 1) return '방금 전';
+  if (h < 24) return h + '시간 전';
+  const d = Math.floor(h / 24);
+  return d + '일 전';
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ============ TOAST ============
+function showToast(message, type='info') {
+  const root = document.getElementById('toast-root');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = message;
+  root.appendChild(el);
+  setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transition = 'opacity 200ms';
+    setTimeout(() => el.remove(), 200);
+  }, 3000);
+}
+
+// ============ MODAL ============
+function openModal(key, props = {}) {
+  state.modal = { key, props };
+  renderModal();
+}
+function closeModal() {
+  state.modal = null;
+  renderModal();
+}
+function renderModal() {
+  const root = document.getElementById('modal-root');
+  if (!state.modal) { root.innerHTML = ''; return; }
+  const { key, props } = state.modal;
+  let inner = '';
+  if (key === 'new-project') {
+    inner = `
+      <h3>새 프로젝트 만들기</h3>
+      <div class="form-field">
+        <label>프로젝트 이름</label>
+        <input type="text" id="m-proj-name" placeholder="예: Trusta 카드뉴스 v2" autofocus>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" data-action="modal-close">취소</button>
+        <button class="btn btn-primary" data-action="modal-create-project">만들기</button>
+      </div>`;
+  } else if (key === 'import-from-project') {
+    inner = `
+      <h3>다른 프로젝트에서 가져오기</h3>
+      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:var(--space-4)">가져올 항목을 선택하세요.</p>
+      <div style="display:flex;flex-direction:column;gap:var(--space-2)">
+        <label><input type="checkbox" checked> 디자인 블록</label>
+        <label><input type="checkbox" checked> 이미지 요소 프롬프트</label>
+        <label><input type="checkbox"> 채널 설정</label>
+        <label><input type="checkbox"> 전체 프롬프트</label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" data-action="modal-close">취소</button>
+        <button class="btn btn-primary" data-action="modal-import">가져오기</button>
+      </div>`;
+  } else if (key === 'edit-block') {
+    const block = props.block || { type:'hook', text:'', tags:'' };
+    inner = `
+      <h3>블록 ${props.isNew ? '추가' : '편집'}</h3>
+      <div class="form-field">
+        <label>타입</label>
+        <select id="m-block-type" style="padding:9px var(--space-3);width:100%;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface)">
+          ${['hook','problem','pain_point','solution','proof','cta'].map(t =>
+            `<option value="${t}" ${block.type===t?'selected':''}>${t}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div class="form-field">
+        <label>본문</label>
+        <textarea id="m-block-text" rows="4" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);font-family:inherit;resize:vertical">${esc(block.text)}</textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" data-action="modal-close">취소</button>
+        <button class="btn btn-primary" data-action="modal-save-block" data-block-id="${block.id||''}">저장</button>
+      </div>`;
+  } else if (key === 'confirm-reextract') {
+    inner = `
+      <h3>재추출하시겠습니까?</h3>
+      <p style="color:var(--text-secondary)">기존에 직접 수정한 내용이 모두 사라집니다.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" data-action="modal-close">취소</button>
+        <button class="btn btn-danger" data-action="modal-confirm-reextract">재추출</button>
+      </div>`;
+  } else if (key === 'shortcuts') {
+    inner = `
+      <h3>키보드 단축키</h3>
+      <table style="width:100%;font-size:13px;border-collapse:collapse">
+        <tr><td style="padding:6px 0"><kbd>?</kbd></td><td>이 화면 보기</td></tr>
+        <tr><td style="padding:6px 0"><kbd>Esc</kbd></td><td>모달 닫기</td></tr>
+        <tr><td style="padding:6px 0"><kbd>Ctrl/⌘ + S</kbd></td><td>저장</td></tr>
+        <tr><td style="padding:6px 0"><kbd>←</kbd> / <kbd>→</kbd></td><td>페이지 이동 (추출 화면)</td></tr>
+        <tr><td style="padding:6px 0"><kbd>1</kbd>~<kbd>9</kbd></td><td>단계 이동</td></tr>
+      </table>
+      <div class="modal-actions">
+        <button class="btn btn-primary" data-action="modal-close">닫기</button>
+      </div>`;
+  }
+  root.innerHTML = `<div class="modal-backdrop" data-action="modal-backdrop"><div class="modal" onclick="event.stopPropagation()">${inner}</div></div>`;
+}
+
+// ============ STEP INDICATOR ============
+const STEPS = [
+  { key:'new', label:'입력', route: id => `#/project/${id}/extract` },
+  { key:'extract', label:'추출', route: id => `#/project/${id}/extract` },
+  { key:'classify', label:'분류', route: id => `#/project/${id}/classify` },
+  { key:'save', label:'저장', route: id => `#/project/${id}/classify` },
+  { key:'prompts', label:'프롬프트', route: id => `#/project/${id}/prompts` },
+  { key:'recipe', label:'레시피', route: id => `#/project/${id}/recipe` },
+  { key:'preview', label:'미리보기', route: id => `#/project/${id}/preview` },
+  { key:'qa', label:'검사', route: id => `#/project/${id}/qa` },
+  { key:'export', label:'산출', route: id => `#/project/${id}/export` },
+];
+
+function renderStepIndicator(currentIdx, projectId) {
+  return `<div class="step-indicator">${STEPS.map((s, i) => {
+    const passed = i < currentIdx;
+    const current = i === currentIdx;
+    const cls = passed ? 'passed' : (current ? 'current' : '');
+    return `${i > 0 ? `<div class="step-line ${i <= currentIdx ? 'passed' : ''}"></div>` : ''}
+      <div class="step ${cls}" data-action="goto-step" data-step="${i}" data-pid="${projectId}">
+        <div class="step-circle">${i+1}</div>
+        <div class="step-label">${s.label}</div>
+      </div>`;
+  }).join('')}</div>`;
+}
+
+// ============ LAYOUT ============
+function renderShell(content) {
+  const route = location.hash || '#/dashboard';
+  const active = (h) => route.startsWith(h) ? 'active' : '';
+  return `
+    <header class="header">
+      <div class="header-left">
+        <button class="icon-btn" data-action="toggle-sidebar" aria-label="메뉴">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="logo">A4 <span class="dot">●</span> PFF</div>
+      </div>
+      <div class="header-right">
+        <button class="icon-btn" data-action="show-shortcuts" aria-label="검색">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+        <button class="icon-btn" aria-label="알림">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="notif-dot"></span>
+        </button>
+        <div class="avatar">${state.user.initial}</div>
+      </div>
+    </header>
+    <div class="body">
+      <nav class="sidebar ${state.sidebarCollapsed ? 'collapsed' : ''} ${state.mobileSidebarOpen ? 'mobile-open' : ''}">
+        <div class="nav-item ${active('#/dashboard')}" data-route="#/dashboard">
+          <div class="nav-icon">🏠</div><span class="nav-label">대시보드</span>
+        </div>
+        <div class="nav-item ${active('#/project/')}" data-route="#/dashboard">
+          <div class="nav-icon">📂</div><span class="nav-label">프로젝트</span>
+        </div>
+        <div class="nav-item ${active('#/library')}" data-route="#/library">
+          <div class="nav-icon">📚</div><span class="nav-label">자료실</span>
+        </div>
+        <div class="nav-item ${active('#/prompts-global')}" data-route="#/prompts-global">
+          <div class="nav-icon">✨</div><span class="nav-label">프롬프트</span>
+        </div>
+        <div class="nav-item ${active('#/settings')}" data-route="#/settings">
+          <div class="nav-icon">⚙️</div><span class="nav-label">설정</span>
+        </div>
+      </nav>
+      <main class="main">${content}</main>
+    </div>`;
+}
+
+// ============ SCREENS ============
+function screenDashboard() {
+  const sorted = [...state.projects].sort((a,b) => b.updatedAt - a.updatedAt).slice(0, 5);
+  const counts = state.projects.reduce((a,p) => { a[p.stage] = (a[p.stage]||0)+1; return a; }, {});
+  const counters = [
+    { stage:'extracting', label:'추출중' },
+    { stage:'classifying', label:'분류중' },
+    { stage:'previewing', label:'미리보기' },
+    { stage:'done', label:'완료' },
+  ];
+  const projList = sorted.length === 0
+    ? `<div class="empty"><div class="ico">📭</div><h3>아직 프로젝트가 없어요</h3><p>새 프로젝트로 시작해보세요.</p></div>`
+    : sorted.map(p => `
+      <div class="project-row" data-action="open-project" data-pid="${p.id}">
+        <div class="ico">📄</div>
+        <div class="name">${esc(p.name)}</div>
+        <div class="badge"><span class="dot" style="background:var(${STAGE_VAR[p.stage]})"></span>${STAGE_LABEL[p.stage]}</div>
+        <div class="time">${timeAgo(p.updatedAt)}</div>
+      </div>`).join('');
+
+  return `
+    <div class="welcome">안녕하세요, ${state.user.name} 님 👋</div>
+    <div class="quick-grid">
+      <div class="quick-card" data-action="new-project"><div class="ico">＋</div><div class="label">새 프로젝트</div></div>
+      <div class="quick-card" data-route="#/library"><div class="ico">📥</div><div class="label">자료실 열기</div></div>
+    </div>
+    <h2>최근 프로젝트</h2>
+    <div class="project-list">${projList}</div>
+    <h2 style="margin-top:var(--space-6)">진행 현황</h2>
+    <div class="counter-grid">
+      ${counters.map(c => `
+        <div class="counter-card" data-action="filter-stage" data-stage="${c.stage}">
+          <div class="label">${c.label}</div>
+          <div class="num">${counts[c.stage] || 0}</div>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+function screenNewProject() {
+  const files = state.newProjectFiles || [];
+  const canNext = state.newProjectName && files.some(f => f.status === 'done');
+  return `
+    <div class="breadcrumb"><span class="back" data-route="#/dashboard">◀ 대시보드</span><span class="sep">|</span><span>새 프로젝트 만들기</span></div>
+    ${renderStepIndicator(0, 'new')}
+    <h1>새 프로젝트 만들기</h1>
+    <div class="form-field">
+      <label>프로젝트 이름</label>
+      <input type="text" id="np-name" placeholder="예: Trusta 카드뉴스 v1" value="${esc(state.newProjectName || '')}" data-action="set-name">
+    </div>
+    <div class="form-field">
+      <label>자료 업로드</label>
+      <div class="dropzone" data-action="upload-trigger">
+        <div class="ico">⬆</div>
+        <div><strong>이곳에 PDF/이미지/문서를 드롭하세요</strong></div>
+        <div class="hint">또는 클릭해서 파일을 선택하세요 — PDF, PNG, JPG, DOCX, MD, TXT</div>
+      </div>
+      <input type="file" id="np-file" multiple style="display:none">
+      ${files.length > 0 ? `<div class="file-list">${files.map((f,i) => `
+        <div class="file-row">
+          <span>📄</span>
+          <div class="name">${esc(f.name)}</div>
+          ${f.status === 'processing' ? `<div class="progress"><div style="width:${f.progress}%"></div></div>` : ''}
+          <div class="status">${f.status === 'done' ? '✓ 완료' : f.status === 'processing' ? '처리중' : '대기'}</div>
+        </div>`).join('')}</div>` : ''}
+    </div>
+    <div class="form-field">
+      <label>추출 방식</label>
+      <div class="radio-group">
+        <div class="radio-item selected"><input type="radio" name="extract-mode" checked> 자동 추천 (권장)</div>
+        <div class="radio-item"><input type="radio" name="extract-mode"> OCR 우선</div>
+        <div class="radio-item"><input type="radio" name="extract-mode"> Vision 우선</div>
+      </div>
+    </div>
+    <button class="btn btn-primary" ${canNext ? '' : 'disabled'} data-action="proceed-to-extract">다음 단계로 →</button>`;
+}
+
+function screenExtract(pid) {
+  const pages = state.extractedPages;
+  const cur = pages[state.currentExtractPage] || pages[0];
+  const model = state.currentModel;
+  return `
+    <div class="breadcrumb"><span class="back" data-route="#/dashboard">◀ 프로젝트</span><span class="sep">|</span><span>Trusta 카드뉴스 v1 > 추출 확인</span></div>
+    ${renderStepIndicator(1, pid)}
+    <h1>추출 확인 <span style="font-size:14px;font-weight:400;color:var(--text-secondary)">(${state.currentExtractPage+1}/${pages.length})</span></h1>
+    <div class="ui6">
+      <div class="ui6-pane">
+        <div class="pane-title">페이지 썸네일</div>
+        <div class="thumb-rail">
+          ${pages.map((p,i) => `<div class="thumb ${i===state.currentExtractPage?'active':''}" data-action="set-page" data-i="${i}">${p.label}</div>`).join('')}
+        </div>
+      </div>
+      <div class="ui6-pane" style="position:relative">
+        <div class="pane-title">추출된 텍스트</div>
+        <span class="save-indicator" id="save-ind">수정됨 ✓</span>
+        <textarea class="extracted-text" data-action="edit-text">${esc(cur.text)}</textarea>
+      </div>
+      <div class="ui6-pane">
+        <div class="pane-title">추출 프롬프트</div>
+        <div class="model-toggle">
+          <button class="${model==='claude'?'active':''}" data-action="set-model" data-m="claude">Claude</button>
+          <button class="${model==='gpt'?'active':''}" data-action="set-model" data-m="gpt">GPT</button>
+          <button class="${model==='gemini'?'active':''}" data-action="set-model" data-m="gemini">Gemini</button>
+        </div>
+        <textarea class="prompt-box">${esc(state.extractPrompts[model])}</textarea>
+        <div style="display:flex;gap:var(--space-2);margin-top:var(--space-3);flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" data-action="copy-prompt-model">📋 ${model} 용 복사</button>
+          <button class="btn btn-secondary btn-sm" data-action="copy-prompt">📋 복사</button>
+          <button class="btn btn-ghost btn-sm" data-action="reset-prompt">↻ 복원</button>
+        </div>
+      </div>
+    </div>
+    <div class="quality-bar">
+      <div class="quality-item quality-good"><span class="dot"></span>텍스트 길이: 적정</div>
+      <div class="quality-item quality-good"><span class="dot"></span>한글 깨짐: 없음</div>
+      <div class="quality-item quality-warning"><span class="dot"></span>표 추출: 일부 누락</div>
+      <div class="quality-actions">
+        <button class="btn btn-ghost btn-sm" data-action="open-modal" data-key="confirm-reextract">재추출</button>
+        <button class="btn btn-secondary btn-sm" data-action="next-page">다음 페이지 →</button>
+        <button class="btn btn-primary btn-sm" data-route="#/project/${pid}/classify">블록 분류로 →</button>
+      </div>
+    </div>`;
+}
+
+function screenClassify(pid) {
+  const tab = state.currentClassifyTab;
+  const blocks = state.textBlocks;
+  const selectedCount = blocks.filter(b => b.selected).length;
+  let body;
+  if (tab === 'text') {
+    body = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-3)">
+        <h3>자동 분류 초안 (룰 기반)</h3>
+        <button class="btn btn-ghost btn-sm" data-action="reclassify">전체 다시 분류</button>
+      </div>
+      <div class="block-list">
+        ${blocks.map(b => `
+          <div class="block-row">
+            <input type="checkbox" data-action="toggle-block" data-bid="${b.id}" ${b.selected?'checked':''}>
+            <span class="type-dot" style="background:var(${TYPE_VAR[b.type]||'--text-secondary'})"></span>
+            <span class="type-label">${b.type}</span>
+            <div class="text">${esc(b.text)}</div>
+            <button class="btn btn-ghost btn-sm" data-action="edit-block" data-bid="${b.id}">편집</button>
+          </div>`).join('')}
+      </div>
+      <button class="btn btn-secondary" style="margin-top:var(--space-3)" data-action="add-block">＋ 블록 직접 추가</button>
+      <div style="margin-top:var(--space-5);display:flex;justify-content:space-between;align-items:center">
+        <div style="color:var(--text-secondary);font-size:13px">${selectedCount}개 선택됨</div>
+        <button class="btn btn-primary" data-action="save-to-library" data-pid="${pid}">자료실에 저장 (${selectedCount}개) →</button>
+      </div>`;
+  } else {
+    const active = state.designBlocks[state.currentDesignBlock];
+    body = `
+      <div class="design-grid">
+        ${state.designBlocks.map((d,i) => `
+          <div class="design-card ${i===state.currentDesignBlock?'active':''}" data-action="set-design" data-i="${i}">
+            <div class="ico">${d.emoji}</div>
+            <div class="label">${esc(d.desc)}</div>
+            <div class="type-name">${d.type}</div>
+          </div>`).join('')}
+      </div>
+      <div class="design-detail">
+        <div class="design-preview">${active.emoji}</div>
+        <div>
+          <h3>${esc(active.desc)}</h3>
+          <p style="color:var(--text-secondary);font-size:13px;margin-bottom:var(--space-3)">타입: ${active.type}</p>
+          ${active.palette.length ? `<div class="palette">${active.palette.map(c => `<div class="swatch" style="background:${c}" title="${c}"></div>`).join('')}</div>` : ''}
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:var(--space-1)">이미지 생성 프롬프트</div>
+          <div class="code-block">${esc(active.prompt)}<button class="btn btn-ghost btn-sm copy-btn" data-action="copy-design-prompt" data-i="${state.currentDesignBlock}">📋</button></div>
+          <div class="model-toggle" style="max-width:300px">
+            <button class="active">Claude</button><button>GPT</button><button>Gemini</button>
+          </div>
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="breadcrumb"><span class="back" data-route="#/project/${pid}/extract">◀ 추출 확인</span><span class="sep">|</span><span>블록 분류</span></div>
+    ${renderStepIndicator(2, pid)}
+    <h1>블록 분류</h1>
+    <div class="tab-bar">
+      <button class="tab ${tab==='text'?'active':''}" data-action="set-classify-tab" data-t="text">텍스트 블록</button>
+      <button class="tab ${tab==='design'?'active':''}" data-action="set-classify-tab" data-t="design">디자인 블록</button>
+    </div>
+    ${body}`;
+}
+
+function screenPrompts(pid) {
+  const fileId = state.currentPromptFile;
+  const file = state.prompts[fileId] || Object.values(state.prompts)[0];
+  const fileList = Object.entries(state.prompts);
+  return `
+    <div class="breadcrumb"><span class="back" data-route="#/project/${pid}/classify">◀ 분류</span><span class="sep">|</span><span>프롬프트 설계</span></div>
+    ${renderStepIndicator(4, pid)}
+    <h1>프롬프트 설계</h1>
+    <div class="prompts-layout">
+      <div class="prompt-list">
+        <input class="prompt-search" placeholder="🔍 검색...">
+        ${fileList.map(([id, p]) => `
+          <div class="prompt-item ${id===fileId?'active':''}" data-action="set-prompt-file" data-id="${id}">
+            <span>📄</span>
+            <span>${p.name}</span>
+            <span class="status-icon">${p.modified ? '●' : '✓'}</span>
+          </div>`).join('')}
+        <div class="prompt-group-title">P4_image_elem (3)</div>
+        ${state.promptGroups.P4_image.map(p => `
+          <div class="prompt-item prompt-sub-item" data-action="set-prompt-file" data-id="${p.id}">
+            <span>${p.name}</span>
+          </div>`).join('')}
+        <div class="prompt-group-title">P5_channel (4)</div>
+        ${state.promptGroups.P5_channel.map(p => `
+          <div class="prompt-item prompt-sub-item" data-action="set-prompt-file" data-id="${p.id}">
+            <span>${p.name}</span>
+          </div>`).join('')}
+        <button class="btn btn-ghost btn-sm" style="margin-top:var(--space-3)">＋ 새 프롬프트</button>
+      </div>
+      <div class="prompt-editor">
+        <div class="editor-meta">
+          <strong>${file.name}</strong>
+          <span class="scope-tag scope-${file.scope}">${file.scope}</span>
+          ${file.modified ? '<span style="color:var(--accent);font-size:11px">● 수정됨</span>' : ''}
+        </div>
+        <div class="model-toggle" style="max-width:300px">
+          <button class="active">Claude</button><button>GPT</button><button>Gemini</button>
+        </div>
+        <textarea class="prompt-box" style="flex:1;min-height:400px">${esc(file.content)}</textarea>
+        <div style="display:flex;gap:var(--space-2);margin-top:var(--space-3)">
+          <button class="btn btn-secondary btn-sm" data-action="copy-file-prompt">📋 복사</button>
+          <button class="btn btn-ghost btn-sm">↻ 템플릿 복원</button>
+          <button class="btn btn-primary btn-sm" data-action="save-prompt-file">💾 저장</button>
+        </div>
+      </div>
+    </div>
+    <div style="text-align:right;margin-top:var(--space-5)">
+      <button class="btn btn-primary" data-route="#/project/${pid}/recipe">레시피 선택으로 →</button>
+    </div>`;
+}
+
+function screenRecipe(pid) {
+  const sel = state.recipes.find(r => r.id === state.selectedRecipe) || state.recipes[0];
+  return `
+    <div class="breadcrumb"><span class="back" data-route="#/project/${pid}/prompts">◀ 프롬프트</span><span class="sep">|</span><span>레시피 선택</span></div>
+    ${renderStepIndicator(5, pid)}
+    <h1>어떤 흐름으로 만들까요?</h1>
+    <div class="recipe-grid">
+      ${state.recipes.map(r => `
+        <div class="recipe-card ${r.id===state.selectedRecipe?'selected':''}" data-action="select-recipe" data-id="${r.id}">
+          <div class="ico">${r.emoji}</div>
+          <div class="name">${r.name}</div>
+          <div class="recipe-flow">
+            ${r.flow.map((s,i) => `<div>${s}</div>${i < r.flow.length-1 ? '<div class="arrow">↓</div>' : ''}`).join('')}
+          </div>
+          <button class="btn ${r.id===state.selectedRecipe?'btn-primary':'btn-secondary'} btn-sm">${r.id===state.selectedRecipe?'선택됨':'선택'}</button>
+        </div>`).join('')}
+    </div>
+    ${sel ? `
+      <div class="recipe-detail">
+        <h3>선택된 레시피: ${sel.name}</h3>
+        <ol class="recipe-step-list">
+          ${sel.steps.map((s,i) => `<li>${i+1}. ${s}</li>`).join('')}
+        </ol>
+      </div>` : ''}
+    <div style="text-align:right">
+      <button class="btn btn-primary" data-route="#/project/${pid}/preview">미리보기로 →</button>
+    </div>`;
+}
+
+function screenPreview(pid) {
+  const isSlotsTab = state.currentChannelTab === '_slots';
+  const ch = state.channels.find(c => c.id === state.currentChannelTab) || state.channels[0];
+  const pages = state.channelPages[state.currentChannelTab] || [];
+  const cur = pages[state.currentPreviewPage] || pages[0];
+  const selSlot = state.imageSlots.find(s => s.id === state.selectedSlot);
+
+  let body;
+  if (isSlotsTab) {
+    body = `
+      <h3>전체 이미지 슬롯 (${state.imageSlots.length}개)</h3>
+      <div class="slot-list">
+        ${state.imageSlots.map(s => `
+          <div class="slot-row ${s.id===state.selectedSlot?'active':''}" data-action="set-slot" data-sid="${s.id}">
+            <div class="slot-name">${s.name}</div>
+            <div>${s.page} · ${s.type}</div>
+            <div class="status ${s.status==='ready'?'ready':s.status==='pending'?'pending':'prompt'}">
+              ${s.status==='ready'?'✓ ready':s.status==='pending'?'⚠ pending':'⏳ prompt only'}
+            </div>
+            <span class="req-tag ${s.required?'required':'optional'}">${s.required?'필수':'선택'}</span>
+          </div>`).join('')}
+      </div>
+      ${selSlot ? `
+        <div class="slot-detail">
+          <div class="slot-drop ${selSlot.image?'has-image':''}" style="${selSlot.image?`background-image:url(${selSlot.image})`:''}" data-action="slot-upload">
+            ${selSlot.image ? '' : 'Drag &amp; Drop<br>또는 클릭'}
+          </div>
+          <div>
+            <h3>${selSlot.name}</h3>
+            <p style="color:var(--text-secondary);font-size:13px">${selSlot.page} · ${selSlot.type} · ${selSlot.required?'필수':'선택'}</p>
+            <div class="code-block">A ${selSlot.type} for ${selSlot.page}, minimal style, matching brand palette
+            <button class="btn btn-ghost btn-sm copy-btn" data-action="copy-slot-prompt">📋</button></div>
+            <div class="model-toggle" style="max-width:300px">
+              <button class="active">Claude</button><button>GPT</button><button>Gemini</button>
+            </div>
+          </div>
+        </div>` : ''}`;
+  } else {
+    body = `
+      <h3 style="margin-bottom:var(--space-1)">${ch.name} 미리보기</h3>
+      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:var(--space-4)">${ch.size} · ${pages.length}장</p>
+      <div class="preview-thumbs">
+        ${pages.map((p,i) => `
+          <div class="preview-thumb ${i===state.currentPreviewPage?'active':''}"
+               style="background:linear-gradient(135deg,${p.color},${p.color}cc)"
+               data-action="set-preview-page" data-i="${i}">
+            <div class="type-badge">${TYPE_LABEL[p.type] || p.type}</div>
+            <div class="ttl">${esc(p.text)}</div>
+            <div class="pg-num">${i+1} / ${pages.length}</div>
+          </div>`).join('')}
+      </div>
+      ${cur ? `
+        <div class="preview-large" style="background:linear-gradient(135deg,${cur.color},${cur.color}cc)">
+          <div class="type-badge">${TYPE_LABEL[cur.type] || cur.type}</div>
+          <h2>${esc(cur.text)}</h2>
+          <div class="pg-num">${state.currentPreviewPage+1} / ${pages.length}</div>
+        </div>` : ''}
+      <div style="display:flex;gap:var(--space-2);justify-content:center;margin-bottom:var(--space-4)">
+        <button class="btn btn-secondary btn-sm" data-action="rerender">↻ HTML 재렌더</button>
+        <button class="btn btn-secondary btn-sm">채널 프롬프트 다시 생성</button>
+      </div>`;
+  }
+  return `
+    <div class="breadcrumb"><span class="back" data-route="#/project/${pid}/recipe">◀ 레시피</span><span class="sep">|</span><span>미리보기</span></div>
+    ${renderStepIndicator(6, pid)}
+    <h1 style="display:flex;justify-content:space-between;align-items:center">미리보기
+      <button class="btn btn-primary" data-route="#/project/${pid}/qa">품질 검사로 →</button>
+    </h1>
+    <div class="channel-tabs">
+      ${state.channels.map(c => `
+        <button class="channel-tab ${c.id===state.currentChannelTab?'active':''}" data-action="set-channel" data-id="${c.id}">${c.icon} ${c.name}</button>
+      `).join('')}
+      <button class="channel-tab ${state.currentChannelTab==='_slots'?'active':''}" data-action="set-channel" data-id="_slots">🖼 이미지 슬롯</button>
+    </div>
+    ${body}`;
+}
+
+function screenQA(pid) {
+  const totalWarn = state.qaResults.reduce((a,g) => a + g.items.filter(i => i.status==='warning').length, 0);
+  return `
+    <div class="breadcrumb"><span class="back" data-route="#/project/${pid}/preview">◀ 미리보기</span><span class="sep">|</span><span>품질 검사</span></div>
+    ${renderStepIndicator(7, pid)}
+    <h1>자동 검사 결과</h1>
+    ${state.qaResults.map(g => `
+      <div class="qa-group card">
+        <div class="qa-channel-name">${g.channel}</div>
+        ${g.items.map(i => `
+          <div class="qa-item">
+            <div class="qa-icon qa-${i.status==='pass'?'pass':i.status==='warning'?'warning':'error'}">
+              ${i.status==='pass'?'✓':i.status==='warning'?'⚠':'✗'}
+            </div>
+            <div>${esc(i.label)}</div>
+          </div>`).join('')}
+      </div>`).join('')}
+    <div class="summary-banner">
+      <div><strong>종합: 통과 가능</strong> (경고 ${totalWarn}건)</div>
+    </div>
+    <div style="display:flex;gap:var(--space-2);justify-content:flex-end">
+      <button class="btn btn-secondary" data-route="#/project/${pid}/preview">경고 수정하러 가기</button>
+      <button class="btn btn-primary" data-route="#/project/${pid}/export">경고 무시하고 진행 →</button>
+    </div>`;
+}
+
+function screenExport(pid) {
+  const groups = [
+    { name: 'Instagram Cardnews', count: 7, ext: 'PNG' },
+    { name: 'LinkedIn', count: 5, ext: 'PNG' },
+    { name: 'Medium', count: 8, ext: 'PNG' },
+    { name: 'X Thread', count: 6, ext: 'PNG' },
+    { name: 'A4 Document', count: 6, ext: 'PDF' },
+  ];
+  return `
+    <div class="breadcrumb"><span class="back" data-route="#/project/${pid}/qa">◀ 품질 검사</span><span class="sep">|</span><span>최종 산출</span></div>
+    ${renderStepIndicator(8, pid)}
+    <h1>생성된 파일 (32개)</h1>
+    ${groups.map(g => `
+      <div class="export-group">
+        <div class="export-header">
+          <strong>${g.name}</strong>
+          <div style="display:flex;align-items:center;gap:var(--space-3)">
+            <span style="color:var(--text-secondary);font-size:13px">${g.count}개</span>
+            <button class="btn btn-secondary btn-sm" data-action="download" data-name="${g.name}">${g.ext === 'PDF'?'PDF':'ZIP'} 다운로드</button>
+          </div>
+        </div>
+        ${Array.from({length: Math.min(3, g.count)}, (_,i) => `
+          <div class="export-file">└ page_${String(i+1).padStart(3,'0')}.${g.ext.toLowerCase()}   ${g.ext==='PDF'?'A4':'1080×1350'}   ${200 + i*50} KB</div>
+        `).join('')}
+        ${g.count > 3 ? `<div class="export-file">└ ... +${g.count-3}개</div>` : ''}
+      </div>`).join('')}
+    <div class="export-all" data-action="download-all">💾 전체 ZIP 다운로드 (12.4 MB)</div>
+    <div style="display:flex;gap:var(--space-2);justify-content:center">
+      <button class="btn btn-secondary" data-route="#/dashboard">프로젝트 보관</button>
+      <button class="btn btn-primary" data-action="new-project">새 프로젝트 시작</button>
+    </div>`;
+}
+
+function screenLibrary() {
+  return `
+    <div class="breadcrumb"><span>자료실</span></div>
+    <h1>자료실</h1>
+    <div class="tab-bar">
+      <button class="tab ${state.currentLibTab==='text'?'active':''}" data-action="set-lib-tab" data-t="text">텍스트 블록 (${state.library.textBlocks.length})</button>
+      <button class="tab ${state.currentLibTab==='design'?'active':''}" data-action="set-lib-tab" data-t="design">디자인 블록 (${state.designBlocks.length})</button>
+      <button class="tab ${state.currentLibTab==='channel'?'active':''}" data-action="set-lib-tab" data-t="channel">채널 어댑터 (${state.channels.length})</button>
+      <button class="tab ${state.currentLibTab==='recipe'?'active':''}" data-action="set-lib-tab" data-t="recipe">레시피 (${state.recipes.length})</button>
+    </div>
+    <div class="lib-filters">
+      <span class="filter-chip active">전체</span>
+      <span class="filter-chip">hook</span>
+      <span class="filter-chip">problem</span>
+      <span class="filter-chip">solution</span>
+      <span class="filter-chip">proof</span>
+      <span class="filter-chip">cta</span>
+    </div>
+    <div class="lib-grid">
+      ${state.library.textBlocks.map(b => `
+        <div class="card-flat">
+          <span class="badge"><span class="dot" style="background:var(${TYPE_VAR[b.type]||'--text-secondary'})"></span>${b.type}</span>
+          <p style="margin:var(--space-3) 0;font-size:14px">${esc(b.text)}</p>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:11px;color:var(--text-secondary)">출처: ${esc(b.source)}</span>
+            <button class="btn btn-ghost btn-sm">📋</button>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function screenPromptsGlobal() {
+  return `
+    <div class="breadcrumb"><span>글로벌 프롬프트</span></div>
+    <h1>글로벌 프롬프트 템플릿</h1>
+    <p style="color:var(--text-secondary)">모든 프로젝트의 기본값이 되는 프롬프트입니다. 프로젝트별로 덮어쓸 수 있어요.</p>
+    <div class="prompts-layout" style="margin-top:var(--space-4)">
+      <div class="prompt-list">
+        <input class="prompt-search" placeholder="🔍 검색...">
+        <div class="prompt-item active"><span>📄</span><span>extract_default.md</span></div>
+        <div class="prompt-item"><span>📄</span><span>classify_default.md</span></div>
+        <div class="prompt-item"><span>📄</span><span>style_minimal.md</span></div>
+        <div class="prompt-item"><span>📄</span><span>style_luxury.md</span></div>
+        <div class="prompt-item"><span>📄</span><span>style_friendly.md</span></div>
+        <div class="prompt-item"><span>📄</span><span>image_elem_default.md</span></div>
+        <div class="prompt-group-title">channel_adapters</div>
+        ${state.channels.map(c => `<div class="prompt-item prompt-sub-item"><span>${c.id}.md</span></div>`).join('')}
+      </div>
+      <div class="prompt-editor">
+        <div class="editor-meta">
+          <strong>extract_default.md</strong>
+          <span class="scope-tag scope-global">global</span>
+        </div>
+        <div class="model-toggle" style="max-width:300px">
+          <button class="active">Claude</button><button>GPT</button><button>Gemini</button>
+        </div>
+        <textarea class="prompt-box" style="flex:1;min-height:400px">${esc(state.extractPrompts.claude)}</textarea>
+        <div style="display:flex;gap:var(--space-2);margin-top:var(--space-3)">
+          <button class="btn btn-secondary btn-sm">📋 복사</button>
+          <button class="btn btn-primary btn-sm">💾 저장</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function screenSettings() {
+  return `
+    <div class="breadcrumb"><span>설정</span></div>
+    <h1>설정</h1>
+    <div class="settings-section">
+      <h3>테마</h3>
+      <div class="settings-row">
+        <div>화면 테마</div>
+        <div class="model-toggle" style="max-width:280px">
+          <button class="${state.theme==='light'?'active':''}" data-action="set-theme" data-t="light">라이트</button>
+          <button class="${state.theme==='dark'?'active':''}" data-action="set-theme" data-t="dark">다크</button>
+          <button data-action="set-theme" data-t="system">시스템</button>
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
+      <h3>기본 모델</h3>
+      <div class="settings-row">
+        <div>프롬프트 기본 모델</div>
+        <div class="model-toggle" style="max-width:280px">
+          <button class="${state.currentModel==='claude'?'active':''}" data-action="set-default-model" data-m="claude">Claude</button>
+          <button class="${state.currentModel==='gpt'?'active':''}" data-action="set-default-model" data-m="gpt">GPT</button>
+          <button class="${state.currentModel==='gemini'?'active':''}" data-action="set-default-model" data-m="gemini">Gemini</button>
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
+      <h3>데이터</h3>
+      <div class="settings-row">
+        <div>
+          <div>전체 데이터 초기화</div>
+          <div style="font-size:12px;color:var(--text-secondary)">localStorage를 비우고 초기 mock 데이터로 복원합니다.</div>
+        </div>
+        <button class="btn btn-danger btn-sm" data-action="reset-data">초기화</button>
+      </div>
+    </div>
+    <div class="settings-section">
+      <h3>정보</h3>
+      <div class="settings-row">
+        <div>버전</div>
+        <div style="color:var(--text-secondary)">v0.1 — Prototype</div>
+      </div>
+      <div class="settings-row">
+        <div>키보드 단축키</div>
+        <button class="btn btn-ghost btn-sm" data-action="open-modal" data-key="shortcuts">보기</button>
+      </div>
+    </div>`;
+}
+
+// ============ ROUTER ============
+function render() {
+  const hash = location.hash || '#/dashboard';
+  document.documentElement.setAttribute('data-theme', state.theme === 'dark' ? 'dark' : 'light');
+  let content = '';
+  const projMatch = hash.match(/^#\/project\/([^/]+)\/(\w+)$/);
+  if (hash === '#/' || hash === '#/dashboard') content = screenDashboard();
+  else if (hash === '#/project/new') content = screenNewProject();
+  else if (projMatch) {
+    const [, pid, step] = projMatch;
+    if (step === 'extract') content = screenExtract(pid);
+    else if (step === 'classify') content = screenClassify(pid);
+    else if (step === 'prompts') content = screenPrompts(pid);
+    else if (step === 'recipe') content = screenRecipe(pid);
+    else if (step === 'preview') content = screenPreview(pid);
+    else if (step === 'qa') content = screenQA(pid);
+    else if (step === 'export') content = screenExport(pid);
+    else content = screenDashboard();
+  }
+  else if (hash === '#/library') content = screenLibrary();
+  else if (hash === '#/prompts-global') content = screenPromptsGlobal();
+  else if (hash === '#/settings') content = screenSettings();
+  else content = screenDashboard();
+  document.getElementById('app').innerHTML = renderShell(content);
+}
+
+// ============ EVENT DELEGATION ============
+document.addEventListener('click', (e) => {
+  const target = e.target.closest('[data-action], [data-route]');
+  if (!target) return;
+  const route = target.getAttribute('data-route');
+  if (route) {
+    location.hash = route;
+    state.mobileSidebarOpen = false;
+    saveState();
+    return;
+  }
+  const action = target.getAttribute('data-action');
+  if (action) handleAction(action, target, e);
+});
+
+function handleAction(action, target, e) {
+  switch(action) {
+    case 'toggle-sidebar':
+      if (window.innerWidth < 768) state.mobileSidebarOpen = !state.mobileSidebarOpen;
+      else state.sidebarCollapsed = !state.sidebarCollapsed;
+      saveState(); render(); break;
+    case 'show-shortcuts': openModal('shortcuts'); break;
+    case 'new-project': location.hash = '#/project/new'; break;
+    case 'open-project': {
+      const pid = target.getAttribute('data-pid');
+      const proj = state.projects.find(p => p.id === pid);
+      const stageMap = { extracting:'extract', classifying:'classify', designing:'prompts', previewing:'preview', checking:'qa', done:'export', draft:'extract', archived:'export' };
+      location.hash = `#/project/${pid}/${stageMap[proj.stage] || 'extract'}`;
+      break;
+    }
+    case 'filter-stage': {
+      const stage = target.getAttribute('data-stage');
+      const n = state.projects.filter(p => p.stage === stage).length;
+      showToast(`${STAGE_LABEL[stage]} 프로젝트 ${n}개`, 'info');
+      break;
+    }
+    case 'goto-step': {
+      const pid = target.getAttribute('data-pid');
+      const idx = parseInt(target.getAttribute('data-step'), 10);
+      if (STEPS[idx]) location.hash = STEPS[idx].route(pid);
+      break;
+    }
+    case 'upload-trigger': document.getElementById('np-file').click(); break;
+    case 'set-name': {
+      // handled via input event below
+      break;
+    }
+    case 'proceed-to-extract': {
+      const newId = 'p' + Date.now();
+      state.projects.unshift({ id: newId, name: state.newProjectName || '새 프로젝트', stage: 'extracting', updatedAt: Date.now() });
+      state.newProjectFiles = []; state.newProjectName = '';
+      saveState();
+      showToast('프로젝트가 생성됐어요', 'success');
+      location.hash = `#/project/${newId}/extract`;
+      break;
+    }
+    case 'set-page': {
+      state.currentExtractPage = parseInt(target.getAttribute('data-i'), 10);
+      saveState(); render(); break;
+    }
+    case 'next-page': {
+      state.currentExtractPage = Math.min(state.extractedPages.length-1, state.currentExtractPage + 1);
+      saveState(); render(); break;
+    }
+    case 'set-model': {
+      state.currentModel = target.getAttribute('data-m');
+      saveState(); render(); break;
+    }
+    case 'copy-prompt': case 'copy-prompt-model':
+      try { navigator.clipboard.writeText(state.extractPrompts[state.currentModel]); } catch(e){}
+      showToast('복사됨', 'success');
+      break;
+    case 'copy-design-prompt': {
+      const i = parseInt(target.getAttribute('data-i'), 10);
+      try { navigator.clipboard.writeText(state.designBlocks[i].prompt); } catch(e){}
+      showToast('복사됨', 'success'); break;
+    }
+    case 'copy-file-prompt': {
+      const f = state.prompts[state.currentPromptFile];
+      if (f) try { navigator.clipboard.writeText(f.content); } catch(e){}
+      showToast('복사됨', 'success'); break;
+    }
+    case 'copy-slot-prompt':
+      showToast('슬롯 프롬프트 복사됨', 'success'); break;
+    case 'reset-prompt': showToast('기본 템플릿으로 복원했어요', 'info'); break;
+    case 'open-modal': openModal(target.getAttribute('data-key')); break;
+    case 'modal-close': case 'modal-backdrop': closeModal(); break;
+    case 'modal-confirm-reextract':
+      closeModal(); showToast('재추출이 완료됐어요', 'success'); break;
+    case 'modal-create-project': {
+      const name = document.getElementById('m-proj-name')?.value || '새 프로젝트';
+      const id = 'p' + Date.now();
+      state.projects.unshift({ id, name, stage: 'extracting', updatedAt: Date.now() });
+      saveState(); closeModal();
+      location.hash = `#/project/${id}/extract`;
+      break;
+    }
+    case 'modal-import':
+      closeModal(); showToast('가져오기 완료', 'success'); break;
+    case 'modal-save-block': {
+      const type = document.getElementById('m-block-type')?.value;
+      const text = document.getElementById('m-block-text')?.value;
+      const bid = target.getAttribute('data-block-id');
+      if (bid) {
+        const b = state.textBlocks.find(x => x.id === bid);
+        if (b) { b.type = type; b.text = text; }
+      } else {
+        state.textBlocks.push({ id: 'b' + Date.now(), type, text, selected: true });
+      }
+      saveState(); closeModal(); render();
+      showToast('저장됨', 'success'); break;
+    }
+    case 'set-classify-tab':
+      state.currentClassifyTab = target.getAttribute('data-t');
+      saveState(); render(); break;
+    case 'toggle-block': {
+      const bid = target.getAttribute('data-bid');
+      const b = state.textBlocks.find(x => x.id === bid);
+      if (b) b.selected = !b.selected;
+      saveState(); render(); break;
+    }
+    case 'edit-block': {
+      const bid = target.getAttribute('data-bid');
+      const block = state.textBlocks.find(x => x.id === bid);
+      openModal('edit-block', { block }); break;
+    }
+    case 'add-block': openModal('edit-block', { isNew: true }); break;
+    case 'reclassify': showToast('재분류 완료', 'success'); break;
+    case 'save-to-library': {
+      const pid = target.getAttribute('data-pid');
+      const n = state.textBlocks.filter(b => b.selected).length;
+      showToast(`${n}개가 자료실에 저장됐어요`, 'success');
+      setTimeout(() => location.hash = `#/project/${pid}/prompts`, 600);
+      break;
+    }
+    case 'set-design':
+      state.currentDesignBlock = parseInt(target.getAttribute('data-i'), 10);
+      saveState(); render(); break;
+    case 'set-prompt-file':
+      state.currentPromptFile = target.getAttribute('data-id');
+      saveState(); render(); break;
+    case 'save-prompt-file': {
+      const f = state.prompts[state.currentPromptFile];
+      if (f) f.modified = true;
+      saveState(); render();
+      showToast('저장됨', 'success'); break;
+    }
+    case 'select-recipe':
+      state.selectedRecipe = target.getAttribute('data-id');
+      saveState(); render(); break;
+    case 'set-channel':
+      state.currentChannelTab = target.getAttribute('data-id');
+      state.currentPreviewPage = 0;
+      saveState(); render(); break;
+    case 'set-preview-page':
+      state.currentPreviewPage = parseInt(target.getAttribute('data-i'), 10);
+      saveState(); render(); break;
+    case 'set-slot':
+      state.selectedSlot = target.getAttribute('data-sid');
+      saveState(); render(); break;
+    case 'slot-upload': {
+      const slot = state.imageSlots.find(s => s.id === state.selectedSlot);
+      if (slot) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (ev) => {
+          const file = ev.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (e2) => {
+            slot.image = e2.target.result;
+            slot.status = 'ready';
+            saveState(); render();
+            showToast('이미지가 업로드됐어요', 'success');
+          };
+          reader.readAsDataURL(file);
+        };
+        input.click();
+      }
+      break;
+    }
+    case 'rerender': {
+      showToast('재렌더 중...', 'info');
+      setTimeout(() => showToast('다시 렌더링했어요', 'success'), 800);
+      break;
+    }
+    case 'download':
+      showToast('다운로드 시작됨 (데모)', 'info'); break;
+    case 'download-all':
+      showToast('전체 다운로드 시작됨 (데모)', 'info'); break;
+    case 'set-lib-tab':
+      state.currentLibTab = target.getAttribute('data-t');
+      saveState(); render(); break;
+    case 'set-theme':
+      state.theme = target.getAttribute('data-t');
+      saveState(); render(); break;
+    case 'set-default-model':
+      state.currentModel = target.getAttribute('data-m');
+      saveState(); render();
+      showToast('기본 모델이 변경됐어요', 'success'); break;
+    case 'reset-data':
+      if (confirm('정말 모든 데이터를 초기화할까요?')) {
+        localStorage.removeItem('a4pf_state');
+        state = JSON.parse(JSON.stringify(INITIAL_STATE));
+        render();
+        showToast('초기화됐어요', 'warning');
+      }
+      break;
+  }
+}
+
+// Input handlers
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (t.id === 'np-name') { state.newProjectName = t.value; saveState(); }
+  if (t.classList.contains('extracted-text')) {
+    const cur = state.extractedPages[state.currentExtractPage];
+    if (cur) cur.text = t.value;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveState();
+      const ind = document.getElementById('save-ind');
+      if (ind) { ind.classList.add('show'); setTimeout(() => ind.classList.remove('show'), 2000); }
+    }, 800);
+  }
+});
+
+// File upload
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'np-file') {
+    const files = Array.from(e.target.files);
+    state.newProjectFiles = state.newProjectFiles || [];
+    files.forEach(f => {
+      const entry = { name: f.name, size: f.size, status: 'uploading', progress: 0 };
+      state.newProjectFiles.push(entry);
+      // Simulate
+      setTimeout(() => { entry.status = 'processing'; render();
+        let p = 0; const iv = setInterval(() => {
+          p += 20; entry.progress = p; render();
+          if (p >= 100) { clearInterval(iv); entry.status = 'done'; saveState(); render(); }
+        }, 200);
+      }, 300);
+    });
+    render();
+  }
+});
+
+// Drag&Drop for dropzone
+document.addEventListener('dragover', (e) => {
+  const dz = e.target.closest('.dropzone');
+  if (dz) { e.preventDefault(); dz.classList.add('drag'); }
+});
+document.addEventListener('dragleave', (e) => {
+  const dz = e.target.closest('.dropzone');
+  if (dz) dz.classList.remove('drag');
+});
+document.addEventListener('drop', (e) => {
+  const dz = e.target.closest('.dropzone');
+  if (dz) {
+    e.preventDefault(); dz.classList.remove('drag');
+    const files = Array.from(e.dataTransfer.files);
+    state.newProjectFiles = state.newProjectFiles || [];
+    files.forEach(f => {
+      const entry = { name: f.name, size: f.size, status: 'processing', progress: 0 };
+      state.newProjectFiles.push(entry);
+      let p = 0; const iv = setInterval(() => {
+        p += 20; entry.progress = p; render();
+        if (p >= 100) { clearInterval(iv); entry.status = 'done'; saveState(); render(); }
+      }, 200);
+    });
+    render();
+  }
+});
+
+// Keyboard
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+  if (e.key === '?' && !e.target.matches('input, textarea')) openModal('shortcuts');
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault(); showToast('저장됨', 'success');
+  }
+  if (e.key === 'ArrowRight' && location.hash.includes('/extract')) {
+    state.currentExtractPage = Math.min(state.extractedPages.length-1, state.currentExtractPage + 1);
+    saveState(); render();
+  }
+  if (e.key === 'ArrowLeft' && location.hash.includes('/extract')) {
+    state.currentExtractPage = Math.max(0, state.currentExtractPage - 1);
+    saveState(); render();
+  }
+});
+
+// Boot
+window.addEventListener('hashchange', render);
+window.addEventListener('load', render);
+window.addEventListener('resize', () => {
+  if (window.innerWidth >= 768) state.mobileSidebarOpen = false;
+});
+render();
+</script>
+</body>
+</html>
